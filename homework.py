@@ -21,7 +21,7 @@ ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 HOMEWORK_VERDICTS = {
-    'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
+    'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!!!',
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
@@ -40,7 +40,7 @@ def check_tokens():
         missing.append('VK_USER_ID')
     if missing:
         logging.critical(
-            f'Отсутствует обязательная переменная окружения:\
+            f'Отсутствует обязательная переменная окружения: \
                 {", ".join(missing)}'
         )
         logging.critical('Программа принудительно остановлена.')
@@ -124,9 +124,45 @@ def send_message(vk, message):
         raise
 
 
+def send_error_message(vk, error_text):
+    """Отправляет сообщение об ошибке в VK, если оно не дублируется."""
+    global last_error_message_sent
+    if error_text != last_error_message_sent:
+        try:
+            send_message(vk, error_text)
+            last_error_message_sent = error_text
+        except Exception:
+            logging.error('Не удалось отправить сообщение об ошибке в VK')
+
+
+def process_homework(homework, vk):
+    """Обрабатывает одну домашнюю работу.
+    Формирует и отправляет уведомление.
+    """
+    try:
+        message = parse_status(homework)
+        send_message(vk, message)
+    except Exception as e:
+        error_msg = f'Ошибка при обработке работы: {e}'
+        logging.error(error_msg)
+        send_error_message(vk, error_msg)
+
+
+def process_response(response, vk):
+    """Обрабатывает ответ API.
+    Проверяет, итерирует работы, обновляет timestamp.
+    """
+    homeworks = check_response(response)
+    if homeworks:
+        for homework in homeworks:
+            process_homework(homework, vk)
+    else:
+        logging.debug('Новых статусов работ нет.')
+    return response.get('current_date', int(time.time()))
+
+
 def main():
     """Основная логика работы бота."""
-    global last_error_message_sent
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s [%(levelname)s] %(message)s',
@@ -140,36 +176,12 @@ def main():
     while True:
         try:
             response = get_api_answer(timestamp)
-            homeworks = check_response(response)
-            if homeworks:
-                for homework in homeworks:
-                    try:
-                        message = parse_status(homework)
-                        send_message(vk, message)
-                    except Exception as e:
-                        error_msg = f'Ошибка при обработке работы: {e}'
-                        logging.error(error_msg)
-                        if error_msg != last_error_message_sent:
-                            try:
-                                send_message(vk, error_msg)
-                                last_error_message_sent = error_msg
-                            except Exception:
-                                logging.error('Не удалось отправить \
-                                              сообщение об ошибке в VK')
-            else:
-                logging.debug('Новых статусов работ нет.')
-            timestamp = response.get('current_date', int(time.time()))
+            timestamp = process_response(response, vk)
         except Exception as error:
             full_error = f'Сбой в работе программы: {error}'
             logging.error(full_error)
             logging.debug(traceback.format_exc())
-            if full_error != last_error_message_sent:
-                try:
-                    send_message(vk, full_error)
-                    last_error_message_sent = full_error
-                except Exception:
-                    logging.error('Не удалось отправить \
-                                  сообщение об ошибке в VK')
+            send_error_message(vk, full_error)
         time.sleep(RETRY_PERIOD)
 
 
