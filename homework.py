@@ -40,7 +40,8 @@ def check_tokens():
         missing.append('VK_USER_ID')
     if missing:
         logging.critical(
-            f'Отсутствует обязательная переменная окружения: {", ".join(missing)}'
+            f'Отсутствует обязательная переменная окружения:\
+                {", ".join(missing)}'
         )
         logging.critical('Программа принудительно остановлена.')
         sys.exit(1)
@@ -57,7 +58,8 @@ def get_api_answer(timestamp):
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
         if response.status_code != 200:
             raise requests.exceptions.HTTPError(
-                f'Эндпоинт {ENDPOINT} недоступен. Код ответа API: {response.status_code}'
+                f'Эндпоинт {ENDPOINT} недоступен. Код ответа API: \
+                    {response.status_code}'
             )
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -73,18 +75,21 @@ def check_response(response):
     Возвращает список домашних работ.
     """
     if not isinstance(response, dict):
-        raise TypeError(f'Ответ API не является словарём. Получен тип {type(response)}')
+        raise TypeError(f'Ответ API не является словарём. Получен тип \
+                        {type(response)}')
     if 'homeworks' not in response or 'current_date' not in response:
         missing_keys = []
         if 'homeworks' not in response:
             missing_keys.append('homeworks')
         if 'current_date' not in response:
             missing_keys.append('current_date')
-        logging.error(f'В ответе API отсутствуют обязательные ключи: {", ".join(missing_keys)}')
+        logging.error(f'В ответе API отсутствуют обязательные ключи: \
+                      {", ".join(missing_keys)}')
         raise KeyError(f'Обязательные ключи отсутствуют: {missing_keys}')
     homeworks = response.get('homeworks')
     if not isinstance(homeworks, list):
-        logging.error(f'Ключ "homeworks" должен быть списком. Получен тип {type(homeworks)}')
+        logging.error(f'Ключ "homeworks" должен быть списком. Получен тип \
+                      {type(homeworks)}')
         raise TypeError('Поле homeworks не является списком')
     return homeworks
 
@@ -92,7 +97,8 @@ def check_response(response):
 def parse_status(homework):
     """Извлекает статус конкретной домашней работы и формирует сообщение."""
     if 'homework_name' not in homework:
-        raise KeyError('Отсутствует ключ "homework_name" в данных о домашней работе')
+        raise KeyError('Отсутствует ключ "homework_name" \
+                       в данных о домашней работе')
     homework_name = homework['homework_name']
     if 'status' not in homework:
         raise KeyError('Отсутствует ключ "status" в данных о домашней работе')
@@ -148,11 +154,11 @@ def main():
                                 send_message(vk, error_msg)
                                 last_error_message_sent = error_msg
                             except Exception:
-                                logging.error('Не удалось отправить сообщение об ошибке в VK')
+                                logging.error('Не удалось отправить \
+                                              сообщение об ошибке в VK')
             else:
                 logging.debug('Новых статусов работ нет.')
             timestamp = response.get('current_date', int(time.time()))
-
         except Exception as error:
             full_error = f'Сбой в работе программы: {error}'
             logging.error(full_error)
@@ -162,7 +168,8 @@ def main():
                     send_message(vk, full_error)
                     last_error_message_sent = full_error
                 except Exception:
-                    logging.error('Не удалось отправить сообщение об ошибке в VK')
+                    logging.error('Не удалось отправить \
+                                  сообщение об ошибке в VK')
         time.sleep(RETRY_PERIOD)
 
 
