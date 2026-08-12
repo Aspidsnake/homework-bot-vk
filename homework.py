@@ -3,12 +3,13 @@ import os
 import random
 import sys
 import time
-import traceback
 from http import HTTPStatus
 
 import requests
 import vk_api
 from dotenv import load_dotenv
+
+from exceptions import InvalidResponseCodeError, TokenMissingError
 
 load_dotenv()
 
@@ -27,18 +28,6 @@ HOMEWORK_VERDICTS = {
 }
 
 
-class TokenMissingError(Exception):
-    """Исключение для отсутствующих обязательных переменных окружения."""
-
-    pass
-
-
-class InvalidResponseCodeError(Exception):
-    """Исключение для неверного кода ответа API."""
-
-    pass
-
-
 def check_tokens():
     """Проверяет доступность всех обязательных переменных окружения."""
     tokens = (
@@ -55,13 +44,15 @@ def check_tokens():
             missing_tokens.append(name)
     if missing_tokens:
         raise TokenMissingError(
-            f'Отсутствуют обязательные переменные окружения: '
-            f'{", ".join(missing_tokens)}'
+            'Отсутствуют обязательные переменные окружения: {}'.format(
+                ', '.join(missing_tokens)
+            )
         )
 
 
 def get_api_answer(timestamp):
     """Делает запрос к эндпоинту API Практикума.
+
     В случае успеха возвращает ответ в виде Python-словаря.
     При ошибке соединения, неверном коде ответа или проблемах с JSON
     выбрасывает исключение ConnectionError, InvalidResponseCodeError
@@ -73,44 +64,47 @@ def get_api_answer(timestamp):
         'params': {'from_date': timestamp}
     }
     logging.info(
-        f'Отправка запроса к API: url={request_params["url"]}, '
-        f'headers={request_params["headers"]}, '
-        f'params={request_params["params"]}'
+        'Отправка запроса к API: url={url}, headers={headers}, '
+        'params={params}'.format(**request_params)
     )
     try:
         response = requests.get(**request_params)
     except requests.exceptions.RequestException as e:
         raise ConnectionError(
-            f'Недоступность эндпоинта '
-            f'url={request_params["url"]}, '
-            f'headers={request_params["headers"]}, '
-            f'params={request_params["params"]}: {e}'
+            'Недоступность эндпоинта url={url}, headers={headers}, '
+            'params={params}: {error}'.format(
+                **request_params, error=e
+            )
         )
     if response.status_code != HTTPStatus.OK:
         raise InvalidResponseCodeError(
-            f'Неверный код ответа API: {response.status_code}. '
-            f'Причина: {response.reason}. '
-            f'Текст ответа: {response.text}'
+            'Неверный код ответа API: {status}. Причина: {reason}. '
+            'Текст ответа: {text}'.format(
+                status=response.status_code,
+                reason=response.reason,
+                text=response.text
+            )
         )
     return response.json()
 
 
 def check_response(response):
     """Проверяет ответ API на соответствие ожидаемой структуре.
+
     Возвращает список домашних работ.
     """
     if not isinstance(response, dict):
         raise TypeError(
-            f'Ответ API не является словарём. '
-            f'Получен тип {type(response)}'
+            'Ответ API не является словарём. '
+            'Получен тип {}'.format(type(response))
         )
     if 'homeworks' not in response:
         raise KeyError('Ответ API не содержит обязательный ключ "homeworks"')
     homeworks = response['homeworks']
     if not isinstance(homeworks, list):
         raise TypeError(
-            f'Ключ "homeworks" должен быть списком. '
-            f'Получен тип {type(homeworks)}'
+            'Ключ "homeworks" должен быть списком. '
+            'Получен тип {}'.format(type(homeworks))
         )
     return homeworks
 
@@ -129,16 +123,21 @@ def parse_status(homework):
     status = homework['status']
     if status not in HOMEWORK_VERDICTS:
         raise ValueError(
-            f'Неожиданный статус работы "{homework_name}": {status}'
+            'Неожиданный статус работы "{}": {}'.format(
+                homework_name, status
+            )
         )
     verdict = HOMEWORK_VERDICTS[status]
     return (
-        f'Изменился статус проверки работы "{homework_name}". {verdict}'
+        'Изменился статус проверки работы "{}". {}'.format(
+            homework_name, verdict
+        )
     )
 
 
 def send_message(vk, message):
     """Отправляет сообщение в VK чат, указанный в VK_USER_ID.
+
     Возвращает True при успешной отправке, иначе False.
     """
     try:
@@ -148,23 +147,11 @@ def send_message(vk, message):
             random_id=random.randint(1, 2**31)
         )
     except Exception:
-        logging.error(
-            f'Сбой при отправке сообщения в VK: {traceback.format_exc()}'
-        )
+        logging.exception('Сбой при отправке сообщения в VK')
         return False
     else:
-        logging.debug(f'Бот отправил сообщение: "{message}"')
+        logging.debug('Бот отправил сообщение: "{}"'.format(message))
         return True
-
-
-def _send_unique_message(vk, message, previous_message):
-    """Отправляет сообщение, если оно не дублирует предыдущее.
-    Возвращает обновлённое значение previous_message.
-    """
-    if message != previous_message:
-        if send_message(vk, message):
-            return message
-    return previous_message
 
 
 def main():
@@ -180,15 +167,14 @@ def main():
             logging.FileHandler(__file__ + '.log', encoding='utf-8')
         ]
     )
-    try:
-        check_tokens()
-    except TokenMissingError as e:
-        logging.critical(str(e))
-        sys.exit(1)
+
+    check_tokens()
+
     vk_session = vk_api.VkApi(token=VK_TOKEN)
     vk = vk_session.get_api()
     timestamp = 0
-    previous_message = None
+    previous_message = ''
+
     while True:
         try:
             response = get_api_answer(timestamp)
@@ -198,17 +184,18 @@ def main():
                 continue
             homework = homeworks[0]
             current_message = parse_status(homework)
-            previous_message = _send_unique_message(
-                vk, current_message, previous_message
-            )
-            timestamp = response.get('current_date', int(time.time()))
+            if current_message != previous_message:
+                if send_message(vk, current_message):
+                    previous_message = current_message
+                    timestamp = response.get(
+                        'current_date', int(time.time())
+                    )
         except Exception as error:
-            current_error = f'Сбой в работе программы: {error}'
-            logging.error(current_error)
-            logging.debug(traceback.format_exc())
-            previous_message = _send_unique_message(
-                vk, current_error, previous_message
-            )
+            current_error = 'Сбой в работе программы: {}'.format(error)
+            logging.exception(current_error)
+            if current_error != previous_message:
+                if send_message(vk, current_error):
+                    previous_message = current_error
         finally:
             time.sleep(RETRY_PERIOD)
 
