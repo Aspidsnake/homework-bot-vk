@@ -62,7 +62,6 @@ def check_tokens():
 
 def get_api_answer(timestamp):
     """Делает запрос к эндпоинту API Практикума.
-
     В случае успеха возвращает ответ в виде Python-словаря.
     При ошибке соединения, неверном коде ответа или проблемах с JSON
     выбрасывает исключение ConnectionError, InvalidResponseCodeError
@@ -98,7 +97,6 @@ def get_api_answer(timestamp):
 
 def check_response(response):
     """Проверяет ответ API на соответствие ожидаемой структуре.
-
     Возвращает список домашних работ.
     """
     if not isinstance(response, dict):
@@ -141,7 +139,6 @@ def parse_status(homework):
 
 def send_message(vk, message):
     """Отправляет сообщение в VK чат, указанный в VK_USER_ID.
-
     Возвращает True при успешной отправке, иначе False.
     """
     try:
@@ -162,7 +159,6 @@ def send_message(vk, message):
 
 def _send_unique_message(vk, message, previous_message):
     """Отправляет сообщение, если оно не дублирует предыдущее.
-
     Возвращает обновлённое значение previous_message.
     """
     if message != previous_message:
@@ -184,18 +180,15 @@ def main():
             logging.FileHandler(__file__ + '.log', encoding='utf-8')
         ]
     )
-
     try:
         check_tokens()
     except TokenMissingError as e:
         logging.critical(str(e))
         sys.exit(1)
-
     vk_session = vk_api.VkApi(token=VK_TOKEN)
     vk = vk_session.get_api()
     timestamp = 0
     previous_message = None
-
     while True:
         try:
             response = get_api_answer(timestamp)
