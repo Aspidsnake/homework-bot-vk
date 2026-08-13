@@ -182,20 +182,27 @@ def main():
             if not homeworks:
                 logging.debug('Новых статусов работ нет.')
                 continue
+
             homework = homeworks[0]
             current_message = parse_status(homework)
-            if current_message != previous_message:
-                if send_message(vk, current_message):
-                    previous_message = current_message
-                    timestamp = response.get(
-                        'current_date', int(time.time())
-                    )
+
+            if (
+                current_message != previous_message
+                and send_message(vk, current_message)
+            ):
+                previous_message = current_message
+                timestamp = response.get('current_date') or timestamp
+
         except Exception as error:
             current_error = 'Сбой в работе программы: {}'.format(error)
             logging.exception(current_error)
-            if current_error != previous_message:
-                if send_message(vk, current_error):
-                    previous_message = current_error
+
+            if (
+                current_error != previous_message
+                and send_message(vk, current_error)
+            ):
+                previous_message = current_error
+
         finally:
             time.sleep(RETRY_PERIOD)
 
